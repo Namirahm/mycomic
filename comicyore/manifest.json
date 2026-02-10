@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "title": "Test Comic",
+  "slug": "test-comic",
+  "reader": { "mode": "infinite", "maxWidth": 1024 },
+  "pages": [
+    {
+      "id": "p001",
+      "alt": "Page one",
+      "image": {
+        "r2Key": "comics/test-comic/pages/p001.examplehash.jpg",
+        "width": 1024,
+        "height": 1536
+      }
+    }
+  ]
+}
