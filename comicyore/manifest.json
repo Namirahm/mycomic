@@ -1,16 +1,40 @@
 {
   "schemaVersion": 1,
-  "title": "Test Comic",
-  "slug": "test-comic",
-  "reader": { "mode": "infinite", "maxWidth": 1024 },
+
+  "publisher": {
+    "id": "kraken",
+    "name": "Kraken"
+  },
+
+  "comic": {
+    "id": "chance-magic",
+    "title": "Chance Magic",
+    "slug": "chance-magic"
+  },
+
+  "issue": {
+    "number": 1,
+    "title": "Issue 001",
+    "slug": "chance-magic-001",
+    "releaseDate": "2026-02-01"
+  },
+
+  "reader": {
+    "mode": "paged"
+  },
+
+  "characters": [],
+
   "pages": [
     {
       "id": "p001",
-      "alt": "Page one",
+      "pageNumber": 1,
+      "alt": "Page 1",
       "image": {
-        "r2Key": "comics/test-comic/pages/p001.examplehash.jpg",
-        "width": 1024,
-        "height": 1536
+        "r2Key": "publishers/kraken/chance-magic/issue-001/pages/p001.jpg"
+      },
+      "textRefs": {
+        "en": "comicyore/text/p001.en.json"
       }
     }
   ]
