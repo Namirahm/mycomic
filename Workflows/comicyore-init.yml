@@ -1,0 +1,80 @@
+name: ComicYore - Init Issue + Generate Manifest
+
+on:
+  workflow_dispatch:
+    inputs:
+      issueDir:
+        description: "Issue folder under issues/, e.g. issue-001"
+        required: true
+      publisher:
+        description: "publisher slug"
+        required: true
+      comic:
+        description: "comic slug"
+        required: true
+      issueSlug:
+        description: "issue slug used in r2Key path"
+        required: true
+      title:
+        description: "issue title"
+        required: true
+  push:
+    paths:
+      - "issues/**/published/pages/**"
+      - "issues/**/published/text/**"
+      - "tools/**"
+      - ".github/workflows/comicyore-init.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Ensure tools executable
+        run: chmod +x tools/init-issue.sh
+
+      - name: Init issue structure (manual only)
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          ./tools/init-issue.sh \
+            "${{ inputs.issueDir }}" \
+            "${{ inputs.publisher }}" \
+            "${{ inputs.comic }}" \
+            "${{ inputs.issueSlug }}" \
+            "${{ inputs.title }}"
+
+      - name: Generate manifests
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            node tools/gen-manifest.mjs --issueDir="${{ inputs.issueDir }}"
+          else
+            # On push: regenerate manifests for any issues that changed
+            CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | awk -F/ '/^issues\/[^/]+\/published\//{print $2}' | sort -u)
+            for d in $CHANGED; do
+              if [ -f "issues/$d/published/manifest.json" ]; then
+                node tools/gen-manifest.mjs --issueDir="$d"
+              fi
+            done
+          fi
+
+      - name: Commit changes (if any)
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add issues/**/published/manifest.json issues/**/published/** || true
+            git commit -m "Update ComicYore manifests"
+            git push
+          else
+            echo "No changes to commit."
+          fi
