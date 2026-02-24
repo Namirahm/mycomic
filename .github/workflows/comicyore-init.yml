@@ -4,19 +4,19 @@ on:
   workflow_dispatch:
     inputs:
       issueDir:
-        description: "Issue folder under issues/, e.g. issue-001"
+        description: "Issue folder under issues/, ex. issue-001"
         required: true
       publisher:
-        description: "publisher slug"
+        description: "publisher slug (lowercase and no spaces ex. comic-publisher)"
         required: true
       comic:
-        description: "comic slug"
+        description: "comic slug (lowercase and no spaces ex. my-awesome-comic)"
         required: true
       issueSlug:
-        description: "issue slug used in r2Key path"
+        description: "issue slug (ex. lowercase and no spaces comic-name-001)"
         required: true
       title:
-        description: "issue title"
+        description: "issue title (ex. My Awesome Comic #1)"
         required: true
   push:
     paths:
@@ -58,8 +58,18 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             node tools/gen-manifest.mjs --issueDir="${{ inputs.issueDir }}"
           else
-            # On push: regenerate manifests for any issues that changed
-            CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | awk -F/ '/^issues\/[^/]+\/published\//{print $2}' | sort -u)
+            # On push: regenerate manifests for any issues that changed.
+            # On a first push, github.event.before can be all zeros; fall back to listing files in the current commit.
+            CHANGED=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" 2>/dev/null \
+              | awk -F/ '/^issues\/[^/]+\/published\//{print $2}' \
+              | sort -u)
+
+            if [ -z "$CHANGED" ]; then
+              CHANGED=$(git show --name-only --pretty="" "${{ github.sha }}" \
+                | awk -F/ '/^issues\/[^/]+\/published\//{print $2}' \
+                | sort -u)
+            fi
+
             for d in $CHANGED; do
               if [ -f "issues/$d/published/manifest.json" ]; then
                 node tools/gen-manifest.mjs --issueDir="$d"

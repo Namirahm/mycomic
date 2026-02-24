@@ -13,8 +13,7 @@ set -euo pipefail
 #   issues/<issueDir>/working/
 #   issues/<issueDir>/published/manifest.json
 #
-# Notes:
-# - This script does NOT create image files. Add final pages to published/pages/ and re-run gen-manifest below if desired.
+# Also creates .gitkeep files so empty folders appear in GitHub.
 
 ISSUE_DIR="${1:-}"
 PUBLISHER="${2:-}"
@@ -33,14 +32,13 @@ WORK="${BASE}/working"
 
 mkdir -p "${PUB}/pages" "${PUB}/text" "${WORK}"
 
+# Ensure empty folders are tracked by git
+touch "${PUB}/pages/.gitkeep" "${PUB}/text/.gitkeep" "${WORK}/.gitkeep"
+
 MANIFEST_PATH="${PUB}/manifest.json"
 
-if [[ -f "${MANIFEST_PATH}" ]]; then
-  echo "manifest already exists: ${MANIFEST_PATH}"
-  exit 0
-fi
-
-cat > "${MANIFEST_PATH}" <<EOF
+if [[ ! -f "${MANIFEST_PATH}" ]]; then
+  cat > "${MANIFEST_PATH}" <<EOF
 {
   "schemaVersion": 1,
   "publisher": { "slug": "${PUBLISHER}" },
@@ -49,13 +47,14 @@ cat > "${MANIFEST_PATH}" <<EOF
   "pages": []
 }
 EOF
+fi
 
-echo "Created:"
-echo "  ${PUB}/pages/"
-echo "  ${PUB}/text/"
-echo "  ${WORK}/"
+echo "Ready:"
+echo "  ${PUB}/pages/ (final exports go here)"
+echo "  ${PUB}/text/  (optional page JSON)"
+echo "  ${WORK}/      (WIP files go here)"
 echo "  ${MANIFEST_PATH}"
 echo
 echo "Next:"
 echo "  Add final images to: ${PUB}/pages/"
-echo "  Then generate pages[] entries (optional) with tools/gen-manifest.mjs"
+echo "  Then run: node tools/gen-manifest.mjs --issueDir=${ISSUE_DIR}"
