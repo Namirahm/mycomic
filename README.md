@@ -1,3 +1,5 @@
+# STOP!!!!!!!!!!!! READ THIS FIRST.
+
 # ComicYore: Simple Step-by-Step
 
 ## 1) Create your private repo
