@@ -20,8 +20,10 @@ on:
         required: true
   push:
     paths:
-      - "issues/**/published/pages/**"
-      - "issues/**/published/text/**"
+      - "issues/**/published/*.jpg"
+      - "issues/**/published/*.jpeg"
+      - "issues/**/published/*.png"
+      - "issues/**/published/*.webp"
       - "issues/**/published/dialogue.txt"
       - "issues/**/published/layout.json"
       - "tools/**"
