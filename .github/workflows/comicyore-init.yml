@@ -22,6 +22,8 @@ on:
     paths:
       - "issues/**/published/pages/**"
       - "issues/**/published/text/**"
+      - "issues/**/published/dialogue.txt"
+      - "issues/**/published/layout.json"
       - "tools/**"
       - ".github/workflows/comicyore-init.yml"
 
