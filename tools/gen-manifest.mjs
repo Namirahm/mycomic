@@ -1,116 +1,210 @@
-// tools/gen-manifest.mjs
-import fs from "node:fs";
-import path from "node:path";
+#!/usr/bin/env node
+// gen-manifest.mjs — regenerates manifest.json from page images in an issue directory.
+//
+// Usage:
+//   node tools/gen-manifest.mjs --issueDir=<folderName>
+//   node tools/gen-manifest.mjs <fullPath> [--publisher <slug>] [--comic <slug>] [--issue-slug <slug>] [--title <title>]
+//
+// --issueDir=<name>  folder name under issues/ (e.g. issue-001). Reads publisher/comic/slug/title
+//                    from the existing manifest.json in that directory.
+//
+// <fullPath>         full path to issue dir (for local use). Publisher/comic/etc can be passed
+//                    as flags or will be derived from the existing manifest / directory name.
+//
+// In both modes, the tool:
+//   - Scans published/ for PNG/JPEG/WebP images and reads their dimensions
+//   - Detects dialogue.txt and layout.json and adds optional fields
+//   - Writes published/manifest.json
 
-function die(msg) { console.error(msg); process.exit(1); }
+import { readdir, readFile, writeFile, stat } from "node:fs/promises";
+import { join, basename, extname, resolve } from "node:path";
 
-function getImageDimensions(filepath) {
-  const fd = fs.openSync(filepath, "r");
-  const buf = Buffer.alloc(26);
-  fs.readSync(fd, buf, 0, 26, 0);
-  fs.closeSync(fd);
+// --- Image dimension readers ---
 
-  // PNG: signature 8 bytes, then IHDR chunk: 4 len + 4 type + 4 width + 4 height
-  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) {
-    return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+function readPngDimensions(buf) {
+  if (buf.length < 24) return null;
+  const sig = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  for (let i = 0; i < 8; i++) if (buf[i] !== sig[i]) return null;
+  const width = (buf[16] << 24) | (buf[17] << 16) | (buf[18] << 8) | buf[19];
+  const height = (buf[20] << 24) | (buf[21] << 16) | (buf[22] << 8) | buf[23];
+  return { width: width >>> 0, height: height >>> 0 };
+}
+
+function readJpegDimensions(buf) {
+  if (buf.length < 4) return null;
+  if (buf[0] !== 0xff || buf[1] !== 0xd8) return null;
+  let i = 2;
+  while (i < buf.length - 8) {
+    if (buf[i] !== 0xff) break;
+    const marker = buf[i + 1];
+    const segLen = (buf[i + 2] << 8) | buf[i + 3];
+    if (
+      (marker >= 0xc0 && marker <= 0xc3) ||
+      (marker >= 0xc5 && marker <= 0xc7) ||
+      (marker >= 0xc9 && marker <= 0xcb) ||
+      (marker >= 0xcd && marker <= 0xcf)
+    ) {
+      const height = (buf[i + 5] << 8) | buf[i + 6];
+      const width = (buf[i + 7] << 8) | buf[i + 8];
+      return { width, height };
+    }
+    i += 2 + segLen;
   }
-
-  // JPEG: scan for SOF marker (0xFF 0xC0/C1/C2)
-  if (buf[0] === 0xff && buf[1] === 0xd8) {
-    const full = fs.readFileSync(filepath);
-    for (let i = 2; i < full.length - 8; i++) {
-      if (full[i] === 0xff && (full[i + 1] & 0xf0) === 0xc0 && full[i + 1] !== 0xff) {
-        const marker = full[i + 1];
-        if (marker === 0xc0 || marker === 0xc1 || marker === 0xc2) {
-          return { width: full.readUInt16BE(i + 7), height: full.readUInt16BE(i + 5) };
-        }
-      }
-    }
-  }
-
-  // WebP: RIFF....WEBP VP8 /VP8L/VP8X
-  if (buf.slice(0, 4).toString("ascii") === "RIFF" && buf.slice(8, 12).toString("ascii") === "WEBP") {
-    const type = buf.slice(12, 16).toString("ascii");
-    if (type === "VP8 ") {
-      // lossy: skip 10 bytes after chunk header, then 3 byte start code, then 16-bit w/h
-      const full = fs.readFileSync(filepath);
-      const w = (full.readUInt16LE(26) & 0x3fff);
-      const h = (full.readUInt16LE(28) & 0x3fff);
-      return { width: w, height: h };
-    }
-    if (type === "VP8L") {
-      const full = fs.readFileSync(filepath);
-      const bits = full.readUInt32LE(21);
-      return { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 };
-    }
-    if (type === "VP8X") {
-      const w = (buf.readUIntLE(24, 3)) + 1;
-      const h = (buf.readUIntLE(27, 3)) + 1;  // buf is only 26 bytes, use full read
-      const full = fs.readFileSync(filepath);
-      return { width: full.readUIntLE(24, 3) + 1, height: full.readUIntLE(27, 3) + 1 };
-    }
-  }
-
   return null;
 }
 
-const args = Object.fromEntries(process.argv.slice(2).map(a => {
-  const m = a.match(/^--([^=]+)=(.*)$/);
-  return m ? [m[1], m[2]] : [a.replace(/^--/, ""), "true"];
-}));
-
-const issueDir = args.issueDir || die("Missing --issueDir=issue-001");
-const base = path.join("issues", issueDir, "published");
-const pagesDir = path.join(base, "pages");
-const textDir = path.join(base, "text");
-const manifestPath = path.join(base, "manifest.json");
-
-if (!fs.existsSync(manifestPath)) die(`Missing manifest: ${manifestPath}`);
-if (!fs.existsSync(pagesDir)) die(`Missing pages dir: ${pagesDir}`);
-
-const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-
-const publisher = manifest?.publisher?.slug || die("manifest.publisher.slug missing");
-const comic = manifest?.comic?.slug || die("manifest.comic.slug missing");
-const issueSlug = manifest?.issue?.slug || die("manifest.issue.slug missing");
-
-const files = fs.readdirSync(pagesDir)
-  .filter(f => /\.(png|jpe?g|webp)$/i.test(f))
-  .sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
-
-function pageIdFromFilename(fn) {
-  return fn.replace(/\.(png|jpe?g|webp)$/i, "");
+function readWebpDimensions(buf) {
+  if (buf.length < 30) return null;
+  const riff = String.fromCharCode(buf[0], buf[1], buf[2], buf[3]);
+  const webp = String.fromCharCode(buf[8], buf[9], buf[10], buf[11]);
+  if (riff !== "RIFF" || webp !== "WEBP") return null;
+  const chunk = String.fromCharCode(buf[12], buf[13], buf[14], buf[15]);
+  if (chunk === "VP8 " && buf.length >= 30) {
+    const rawW = buf[26] | (buf[27] << 8);
+    const rawH = buf[28] | (buf[29] << 8);
+    return { width: rawW & 0x3fff, height: rawH & 0x3fff };
+  }
+  if (chunk === "VP8L" && buf.length >= 25) {
+    const bits = buf[21] | (buf[22] << 8) | (buf[23] << 16) | (buf[24] << 24);
+    return { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 };
+  }
+  if (chunk === "VP8X" && buf.length >= 30) {
+    return {
+      width: (buf[24] | (buf[25] << 8) | (buf[26] << 16)) + 1,
+      height: (buf[27] | (buf[28] << 8) | (buf[29] << 16)) + 1,
+    };
+  }
+  return null;
 }
 
-function r2KeyFor(pageId, ext) {
-  return `publishers/${publisher}/${comic}/${issueSlug}/pages/${pageId}${ext}`;
+function getImageDimensions(buf, ext) {
+  const e = ext.toLowerCase();
+  if (e === ".png") return readPngDimensions(buf);
+  if (e === ".jpg" || e === ".jpeg") return readJpegDimensions(buf);
+  if (e === ".webp") return readWebpDimensions(buf);
+  return null;
 }
 
-manifest.pages = files.map(fn => {
-  const pageId = pageIdFromFilename(fn);
-  const ext = path.extname(fn).toLowerCase();
-  const githubPath = `issues/${issueDir}/published/pages/${fn}`;
-  const r2Key = r2KeyFor(pageId, ext);
+// --- Argument parsing ---
 
-  const textPath = path.join(textDir, `${pageId}.json`);
-  const textRefs = fs.existsSync(textPath)
-    ? [`issues/${issueDir}/published/text/${pageId}.json`]
-    : [];
+const args = process.argv.slice(2);
+if (args.length === 0) {
+  console.error("Usage: node tools/gen-manifest.mjs --issueDir=<folderName>");
+  console.error("       node tools/gen-manifest.mjs <fullIssuePath> [--publisher <slug>] ...");
+  process.exit(1);
+}
 
-  const dims = getImageDimensions(path.join(pagesDir, fn));
-  if (!dims) console.warn(`  Warning: could not read dimensions for ${fn}`);
+let issueDirName = null;  // folder name only (under issues/)
+let issueFullPath = null; // full path
+let publisherSlug = "";
+let comicSlug = "";
+let issueSlug = "";
+let issueTitle = "";
 
-  return {
-    id: pageId,
-    alt: "",
-    image: {
-      r2Key,
-      githubPath,
-      ...(dims && { width: dims.width, height: dims.height }),
-    },
-    textRefs
-  };
+for (let i = 0; i < args.length; i++) {
+  if (args[i].startsWith("--issueDir=")) {
+    issueDirName = args[i].slice("--issueDir=".length);
+  } else if (args[i] === "--publisher") {
+    publisherSlug = args[++i] || "";
+  } else if (args[i] === "--comic") {
+    comicSlug = args[++i] || "";
+  } else if (args[i] === "--issue-slug") {
+    issueSlug = args[++i] || "";
+  } else if (args[i] === "--title") {
+    issueTitle = args[++i] || "";
+  } else if (!args[i].startsWith("--")) {
+    issueFullPath = resolve(args[i]);
+  }
+}
+
+// Resolve the full path
+if (issueDirName) {
+  issueFullPath = resolve("issues", issueDirName);
+} else if (!issueFullPath) {
+  console.error("No issue directory specified.");
+  process.exit(1);
+}
+
+const publishedDir = join(issueFullPath, "published");
+const existingManifestPath = join(publishedDir, "manifest.json");
+
+// Read existing manifest to fill in any missing metadata
+let existingManifest = null;
+try {
+  const raw = await readFile(existingManifestPath, "utf-8");
+  existingManifest = JSON.parse(raw);
+} catch {
+  // no existing manifest — that's fine for fresh runs with explicit flags
+}
+
+if (!publisherSlug) publisherSlug = existingManifest?.publisher?.slug || "";
+if (!comicSlug)    comicSlug    = existingManifest?.comic?.slug    || "";
+if (!issueSlug)    issueSlug    = existingManifest?.issue?.slug    || basename(issueFullPath);
+if (!issueTitle)   issueTitle   = existingManifest?.issue?.title   || issueSlug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+// --- Scan for page images ---
+
+const entries = await readdir(publishedDir).catch(() => {
+  console.error(`Cannot read directory: ${publishedDir}`);
+  process.exit(1);
 });
 
-fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n", "utf8");
-console.log(`Updated ${manifestPath} with ${manifest.pages.length} pages.`);
+const imageExts = new Set([".png", ".jpg", ".jpeg", ".webp"]);
+const imageFiles = entries
+  .filter((f) => imageExts.has(extname(f).toLowerCase()))
+  .filter((f) => !f.startsWith("."))
+  .sort();
+
+if (imageFiles.length === 0) {
+  console.warn("Warning: no image files found in", publishedDir);
+}
+
+// --- Build pages array ---
+
+const pages = [];
+for (let i = 0; i < imageFiles.length; i++) {
+  const fileName = imageFiles[i];
+  const ext = extname(fileName);
+  const pageId = `p${String(i + 1).padStart(3, "0")}`;
+  const r2Key = `${comicSlug}/${issueSlug}/${fileName}`;
+
+  const fileBuf = await readFile(join(publishedDir, fileName));
+  const dims = getImageDimensions(fileBuf, ext);
+
+  pages.push({
+    id: pageId,
+    pageNumber: i + 1,
+    alt: `Page ${i + 1}`,
+    image: {
+      r2Key,
+      githubPath: `issues/${basename(issueFullPath)}/published/${fileName}`,
+      ...(dims ? { width: dims.width, height: dims.height } : {}),
+    },
+  });
+}
+
+// --- Check for optional dialogue.txt and layout.json ---
+
+const hasDialogue = await stat(join(publishedDir, "dialogue.txt")).then(() => true).catch(() => false);
+const hasLayout   = await stat(join(publishedDir, "layout.json")).then(() => true).catch(() => false);
+
+const issueDirRelative = `issues/${basename(issueFullPath)}`;
+
+// --- Build manifest ---
+
+const manifest = {
+  schemaVersion: 1,
+  ...(publisherSlug ? { publisher: { slug: publisherSlug } } : {}),
+  ...(comicSlug     ? { comic:     { slug: comicSlug     } } : {}),
+  issue: { slug: issueSlug, title: issueTitle },
+  ...(hasDialogue ? { dialogue: `${issueDirRelative}/published/dialogue.txt` } : {}),
+  ...(hasLayout   ? { layout:   `${issueDirRelative}/published/layout.json`  } : {}),
+  pages,
+};
+
+await writeFile(existingManifestPath, JSON.stringify(manifest, null, 2), "utf-8");
+console.log(
+  `Wrote ${existingManifestPath} with ${pages.length} page(s)` +
+  (hasDialogue ? ", dialogue" : "") +
+  (hasLayout   ? ", layout"   : "")
+);
