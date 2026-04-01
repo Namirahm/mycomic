@@ -140,6 +140,10 @@ if (!comicSlug)    comicSlug    = existingManifest?.comic?.slug    || "";
 if (!issueSlug)    issueSlug    = existingManifest?.issue?.slug    || basename(issueFullPath);
 if (!issueTitle)   issueTitle   = existingManifest?.issue?.title   || issueSlug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
+publisherSlug = publisherSlug.toLowerCase();
+comicSlug     = comicSlug.toLowerCase();
+issueSlug     = issueSlug.toLowerCase();
+
 // --- Scan for panel images ---
 
 const imageExts = new Set([".png", ".jpg", ".jpeg", ".webp"]);
