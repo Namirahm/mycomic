@@ -24,27 +24,38 @@
 4. The workflow will create the folders and an initial `manifest.json`, then commit them to your repo.
 
 ## 4) Add final pages
-1. Put your finished page images here:
-   - `issues/<issueDir>/published/pages/`
-   Example:
-   - `issues/issue-001/published/pages/p001.jpg`
-   - `issues/issue-001/published/pages/p002.jpg`
-2. Commit and push.
+Put your finished panel images directly in:
+```
+issues/<issueDir>/published/
+```
+Name your files using this pattern:
+```
+p001-pn01.jpg   ← page 1, panel 1
+p001-pn02.jpg   ← page 1, panel 2
+p002-pn01.jpg   ← page 2, panel 1
+```
+Supported formats: `.jpg`, `.jpeg`, `.png`, `.webp`
 
-## 5) Generate/update the manifest (each time you add/remove pages)
-1. Go to **Actions** tab.
-2. Run the workflow again (or let it run automatically, if enabled).
-3. It updates:
-   - `issues/<issueDir>/published/manifest.json`
-   and commits the change.
+Commit and push — the manifest will be regenerated automatically.
 
-## 6) Publish to ComicYore
+## 5) Optional: add dialogue and layout
+- **`dialogue.txt`** — speech bubble script. A starter file is created by the init workflow.
+- **`layout.json`** — panel layout data.
+
+Place these alongside your images in `issues/<issueDir>/published/`. When present, they are referenced automatically in the manifest.
+
+## 6) Generate/update the manifest
+The manifest regenerates automatically on every push that changes files in `published/`. To trigger it manually:
+1. Go to the **Actions** tab.
+2. Run the **ComicYore – Init Issue + Generate Manifest** workflow with the same `issueDir` as your existing issue.
+
+## 7) Publish to ComicYore
 1. Log into ComicYore with GitHub OAuth.
 2. Refresh the issue (ComicYore caches your manifest from GitHub).
-3. Sync the issue (ComicYore copies your published page images from GitHub into R2).
+3. Sync the issue (ComicYore copies your published panel images from GitHub into R2).
 4. Publish the issue.
 
-## 7) Share
+## 8) Share
 Share the ComicYore page link (reader URL). Do not share the signed image URLs; they expire.
 
 ## Rules
