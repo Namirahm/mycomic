@@ -207,12 +207,31 @@ for (const pageId of sortedPageIds) {
   pages.push({ id: pageId, panels });
 }
 
-// --- Check for optional dialogue.txt and layout.json ---
+// --- Check for optional dialogue.txt, layout.json, and translation files ---
 
 const hasDialogue = await stat(join(publishedDir, "dialogue.txt")).then(() => true).catch(() => false);
 const hasLayout   = await stat(join(publishedDir, "layout.json")).then(() => true).catch(() => false);
 
 const issueDirRelative = `issues/${basename(issueFullPath)}`;
+
+// Scan for dialogue.{lang}.txt and layout.{lang}.json translation files
+const LANG_CODE = /^[a-z]{2,3}(-[a-z0-9]{2,8})*$/;
+const languages = {};
+for (const entry of allEntries) {
+  const dialogueMatch = entry.match(/^dialogue\.([a-z]{2,3}(?:-[a-z0-9]{2,8})*)\.txt$/);
+  if (dialogueMatch && LANG_CODE.test(dialogueMatch[1])) {
+    const lang = dialogueMatch[1];
+    if (!languages[lang]) languages[lang] = {};
+    languages[lang].dialogue = `${issueDirRelative}/published/${entry}`;
+  }
+  const layoutMatch = entry.match(/^layout\.([a-z]{2,3}(?:-[a-z0-9]{2,8})*)\.json$/);
+  if (layoutMatch && LANG_CODE.test(layoutMatch[1])) {
+    const lang = layoutMatch[1];
+    if (!languages[lang]) languages[lang] = {};
+    languages[lang].layout = `${issueDirRelative}/published/${entry}`;
+  }
+}
+const hasLanguages = Object.keys(languages).length > 0;
 
 // --- Build manifest ---
 
@@ -221,15 +240,18 @@ const manifest = {
   ...(publisherSlug ? { publisher: { slug: publisherSlug } } : {}),
   ...(comicSlug     ? { comic:     { slug: comicSlug     } } : {}),
   issue: { ...(existingManifest?.issue ?? {}), slug: issueSlug, title: issueTitle },
-  ...(hasDialogue ? { dialogue: `${issueDirRelative}/published/dialogue.txt` } : {}),
-  ...(hasLayout   ? { layout:   `${issueDirRelative}/published/layout.json`  } : {}),
+  ...(hasDialogue   ? { dialogue:  `${issueDirRelative}/published/dialogue.txt` } : {}),
+  ...(hasLayout     ? { layout:    `${issueDirRelative}/published/layout.json`  } : {}),
+  ...(hasLanguages  ? { languages } : {}),
   pages,
 };
 
 await writeFile(existingManifestPath, JSON.stringify(manifest, null, 2), "utf-8");
 const totalPanels = pages.reduce((s, p) => s + p.panels.length, 0);
+const langList = Object.keys(languages);
 console.log(
   `Wrote ${existingManifestPath} with ${pages.length} page(s), ${totalPanels} panel(s)` +
-  (hasDialogue ? ", dialogue" : "") +
-  (hasLayout   ? ", layout"   : "")
+  (hasDialogue   ? ", dialogue" : "") +
+  (hasLayout     ? ", layout"   : "") +
+  (hasLanguages  ? `, languages: [${langList.join(", ")}]` : "")
 );
