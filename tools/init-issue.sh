@@ -20,8 +20,8 @@ FULL_DIR="issues/${ISSUE_DIR_NAME}"
 PUBLISHED_DIR="${FULL_DIR}/published"
 
 if [ -d "$PUBLISHED_DIR" ]; then
-  echo "Directory already exists: $PUBLISHED_DIR"
-  exit 1
+  echo "Issue already initialised: $PUBLISHED_DIR — skipping."
+  exit 0
 fi
 
 mkdir -p "$PUBLISHED_DIR"
@@ -54,6 +54,10 @@ cat > "${PUBLISHED_DIR}/dialogue.txt" << 'DIALOGUEEOF'
 # p002.2 [Maya!]: Watch out!
 # p002.3 [Maya~]: I have a bad feeling about this.
 # p002.4 [Cass bg=#ffeeee font=Permanent Marker]: This changes everything.
+#
+# For translation files (dialogue.ja.txt, dialogue.fr.txt, etc.):
+#   @writing-mode: vertical-rl   (Japanese/Chinese vertical text, right-to-left columns)
+#   @writing-mode: horizontal    (default, left-to-right — safe to omit)
 DIALOGUEEOF
 
 echo "Created: ${PUBLISHED_DIR}/dialogue.txt"
