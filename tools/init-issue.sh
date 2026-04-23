@@ -18,6 +18,7 @@ fi
 
 FULL_DIR="issues/${ISSUE_DIR_NAME}"
 PUBLISHED_DIR="${FULL_DIR}/published"
+WORKING_DIR="${FULL_DIR}/working"
 
 if [ -d "$PUBLISHED_DIR" ]; then
   echo "Issue already initialised: $PUBLISHED_DIR — skipping."
@@ -25,6 +26,8 @@ if [ -d "$PUBLISHED_DIR" ]; then
 fi
 
 mkdir -p "$PUBLISHED_DIR"
+mkdir -p "$WORKING_DIR"
+touch "${WORKING_DIR}/.gitkeep"
 
 cat > "${PUBLISHED_DIR}/dialogue.txt" << 'DIALOGUEEOF'
 # dialogue.txt — speech bubble script for this issue

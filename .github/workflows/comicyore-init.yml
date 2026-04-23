@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       issueDir:
-        description: "Issue folder under issues/, ex. issue-001"
+        description: "Issue folder under issues/, ex. my-comic/issue-001"
         required: true
       publisher:
         description: "publisher slug (lowercase and no spaces ex. comic-publisher)"
@@ -63,12 +63,12 @@ jobs:
             node tools/gen-manifest.mjs --issueDir="${{ inputs.issueDir }}"
           else
             CHANGED=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" 2>/dev/null \
-              | awk -F/ '/^issues\/[^/]+\/published\//{print $2}' \
+              | sed -n 's|^issues/\(.*\)/published/.*|\1|p' \
               | sort -u)
 
             if [ -z "$CHANGED" ]; then
               CHANGED=$(git show --name-only --pretty="" "${{ github.sha }}" \
-                | awk -F/ '/^issues\/[^/]+\/published\//{print $2}' \
+                | sed -n 's|^issues/\(.*\)/published/.*|\1|p' \
                 | sort -u)
             fi
 

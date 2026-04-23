@@ -17,7 +17,7 @@
 //   - Writes published/manifest.json
 
 import { readdir, readFile, writeFile, stat } from "node:fs/promises";
-import { join, basename, extname, resolve } from "node:path";
+import { join, basename, extname, resolve, relative } from "node:path";
 
 // --- Image dimension readers ---
 
@@ -179,6 +179,8 @@ for (const fileName of panelFiles) {
 
 // --- Build pages array (schemaVersion 2) ---
 
+const issueDirRelative = `issues/${relative(join(process.cwd(), "issues"), issueFullPath)}`;
+
 const sortedPageIds = [...pageMap.keys()].sort();
 const pages = [];
 
@@ -197,7 +199,7 @@ for (const pageId of sortedPageIds) {
       alt: `Panel ${i + 1}`,
       image: {
         r2Key,
-        githubPath: `issues/${basename(issueFullPath)}/published/${fileName}`,
+        githubPath: `${issueDirRelative}/published/${fileName}`,
         ...(dims ? { width: dims.width, height: dims.height } : {}),
       },
       grid: null,
@@ -212,7 +214,6 @@ for (const pageId of sortedPageIds) {
 const hasDialogue = await stat(join(publishedDir, "dialogue.txt")).then(() => true).catch(() => false);
 const hasLayout   = await stat(join(publishedDir, "layout.json")).then(() => true).catch(() => false);
 
-const issueDirRelative = `issues/${basename(issueFullPath)}`;
 
 // Scan for dialogue.{lang}.txt and layout.{lang}.json translation files
 const LANG_CODE = /^[a-z]{2,3}(-[a-z0-9]{2,8})*$/;
