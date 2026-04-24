@@ -179,7 +179,9 @@ for (const fileName of panelFiles) {
 
 // --- Build pages array (schemaVersion 2) ---
 
-const issueDirRelative = `issues/${relative(join(process.cwd(), "issues"), issueFullPath)}`;
+const issueDirRelative = issueDirName
+  ? `issues/${issueDirName}`
+  : `issues/${relative(join(process.cwd(), "issues"), issueFullPath).replace(/\\/g, "/")}`;
 
 const sortedPageIds = [...pageMap.keys()].sort();
 const pages = [];
